@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       app_url:
-        description: 'URL de tu web'
+        description: 'URL completa de tu web (con https://)'
         required: true
-        default: 'https://google.com'
+        default: 'https://ejemplo.com'
       app_name:
         description: 'Nombre de la app'
         required: true
@@ -17,25 +17,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clonar código
-        uses: actions/checkout@v4
-
-      - name: Configurar Java
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Descargar y preparar plantilla Android
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar NodeJS y Bubblewrap
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      - name: Generar e inicializar App Android
         run: |
-          git clone https://github.com/hiteshsahu/Android-Universal-WebView-App-Template.git app-template
-          cd app-template
-          sed -i 's|https://github.com/hiteshsahu|${{ github.event.inputs.app_url }}|g' Universal/src/main/res/values/strings.xml
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          mkdir app-build && cd app-build
+          bubblewrap init --manifest="${{ github.event.inputs.app_url }}/manifest.json" || true
+          
+          # Si no tiene manifest, creamos la estructura base nativa directa
+          if [ ! -f "twabuilder.json" ]; then
+            bubblewrap init --url="${{ github.event.inputs.app_url }}"
+          fi
+
+      - name: Compilar APK
+        run: |
+          cd app-build
+          bubblewrap build --skipPwaValidation
 
       - name: Guardar APK generado
         uses: actions/upload-artifact@v4
         with:
-          name: MiApp-Debug
-          path: app-template/Universal/build/outputs/apk/debug/*.apk
+          name: MiApp-APK
+          path: app-build/*.apk
