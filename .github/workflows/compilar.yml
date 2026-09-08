@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       app_url:
-        description: 'URL completa de tu web (con https://)'
+        description: 'URL de tu web (con https://)'
         required: true
-        default: 'https://ejemplo.com'
+        default: 'https://google.com'
       app_name:
         description: 'Nombre de la app'
         required: true
@@ -23,34 +23,45 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Instalar NodeJS y Bubblewrap
+      - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
 
-      - name: Instalar Bubblewrap CLI
-        run: npm install -g @bubblewrap/cli
-
-      - name: Generar e inicializar App Android
+      - name: Crear aplicación Android con Capacitor
         run: |
-          mkdir app-build && cd app-build
-          bubblewrap init --manifest="${{ github.event.inputs.app_url }}/manifest.json" || true
+          mkdir myapp && cd myapp
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android
           
-          # Si no tiene manifest, creamos la estructura base nativa directa
-          if [ ! -f "twabuilder.json" ]; then
-            bubblewrap init --url="${{ github.event.inputs.app_url }}"
-          fi
+          # Inicializar proyecto
+          npx cap init "${{ github.event.inputs.app_name }}" "com.app.${{ github.event.inputs.app_name }}" --web-dir "www"
+          
+          # Crear carpeta web básica requerida por Capacitor
+          mkdir www
+          echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=${{ github.event.inputs.app_url }}"></head><body></body></html>' > www/index.html
+          
+          # Agregar plataforma Android
+          npx cap add android
 
-      - name: Compilar APK
+          # Configurar para que cargue tu web en vivo directamente
+          node -e "
+            const fs = require('fs');
+            const file = 'capacitor.config.json';
+            let config = JSON.parse(fs.readFileSync(file));
+            config.server = { url: '${{ github.event.inputs.app_url }}', cleartext: true };
+            fs.writeFileSync(file, JSON.stringify(config, null, 2));
+          "
+          npx cap copy android
+
+      - name: Compilar APK con Gradle
         run: |
-          cd app-build
-          bubblewrap build --skipPwaValidation
+          cd myapp/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Guardar APK generado
         uses: actions/upload-artifact@v4
         with:
-          name: MiApp-APK
-          path: app-build/*.apk
+          name: ${{ github.event.inputs.app_name }}-APK
+          path: myapp/android/app/build/outputs/apk/debug/*.apk
