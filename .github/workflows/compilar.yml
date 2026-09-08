@@ -1,0 +1,41 @@
+name: Compilar APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: 'URL de tu web'
+        required: true
+        default: 'https://google.com'
+      app_name:
+        description: 'Nombre de la app'
+        required: true
+        default: 'MiApp'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Descargar y preparar plantilla Android
+        run: |
+          git clone https://github.com/hiteshsahu/Android-Universal-WebView-App-Template.git app-template
+          cd app-template
+          sed -i 's|https://github.com/hiteshsahu|${{ github.event.inputs.app_url }}|g' Universal/src/main/res/values/strings.xml
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Guardar APK generado
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiApp-Debug
+          path: app-template/Universal/build/outputs/apk/debug/*.apk
